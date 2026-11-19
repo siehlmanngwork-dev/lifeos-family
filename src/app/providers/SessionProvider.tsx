@@ -1,4 +1,4 @@
-import { createContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { subscribeAuthState, type AuthUser } from '../../services/auth/authService';
 import {
   ensureUserSetup,
@@ -6,25 +6,7 @@ import {
   subscribeUserProfile,
 } from '../../services/firestore';
 import type { Permissions, UserProfile } from '../../models';
-
-export interface SessionState {
-  /** True until auth state and (if signed in) profile + permissions are known. */
-  loading: boolean;
-  authUser: AuthUser | null;
-  profile: UserProfile | null;
-  permissions: Permissions | null;
-  error: string | null;
-}
-
-const initialState: SessionState = {
-  loading: true,
-  authUser: null,
-  profile: null,
-  permissions: null,
-  error: null,
-};
-
-export const SessionContext = createContext<SessionState>(initialState);
+import { SessionContext, type SessionState } from './sessionContext';
 
 /**
  * Tracks Firebase auth, runs the first-login user setup and keeps the

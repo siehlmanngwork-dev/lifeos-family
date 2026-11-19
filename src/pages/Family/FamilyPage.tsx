@@ -1,4 +1,4 @@
-import { FamilyOverview } from '../../components/family/FamilyOverview';
+import { FamilyGrid } from '../../components/family/FamilyGrid';
 import { FamilySetup } from '../../components/family/FamilySetup';
 import { ErrorNote, LoadingScreen } from '../../components/shared/Feedback';
 import { useFamily, useFamilyMembers } from '../../hooks/useData';
@@ -7,7 +7,7 @@ import { useCurrentUser } from '../../hooks/useSession';
 export function FamilyPage() {
   const { userId, profile } = useCurrentUser();
   const { data: family, loading, error } = useFamily();
-  const { members, error: membersError } = useFamilyMembers();
+  const { error: membersError } = useFamilyMembers();
 
   return (
     <div className="page">
@@ -20,7 +20,7 @@ export function FamilyPage() {
       ) : loading ? (
         <LoadingScreen />
       ) : family ? (
-        <FamilyOverview family={family} members={members} currentUserId={userId} />
+        <FamilyGrid family={family} />
       ) : (
         <ErrorNote message="Familie wurde nicht gefunden." />
       )}

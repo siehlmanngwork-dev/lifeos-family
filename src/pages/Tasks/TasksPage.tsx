@@ -22,14 +22,14 @@ export function TasksPage() {
   const done = useMemo(
     () =>
       tasks
-        .filter((t) => t.status === 'done')
+        .filter((t) => t.status !== 'open')
         .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? '')),
     [tasks],
   );
 
   const toggle = (task: Task) => {
     setActionError(null);
-    setTaskCompleted(task.id, task.status === 'open').catch((e: Error) => setActionError(e.message));
+    setTaskCompleted(task.id, task.status === 'open', task.shoppingItemId).catch((e: Error) => setActionError(e.message));
   };
 
   const names = (task: Task) => task.assignees.map((id) => membersById.get(id)?.displayName ?? 'Unbekannt');

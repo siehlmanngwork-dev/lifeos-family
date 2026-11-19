@@ -1,3 +1,5 @@
+import type { ManualStatus } from './status';
+
 export const WEEKDAYS = [
   'monday',
   'tuesday',
@@ -41,6 +43,8 @@ export interface UserProfile {
   familyId: string | null;
   availableHoursPerDay: WeeklyCapacity;
   createdAt: string;
+  /** Manual status override (Release 0.2). */
+  manualStatus?: ManualStatus | null;
 }
 
 export type UserProfileUpdate = Partial<Pick<UserProfile, 'displayName' | 'availableHoursPerDay'>>;

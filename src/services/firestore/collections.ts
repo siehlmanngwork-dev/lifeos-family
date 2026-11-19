@@ -14,6 +14,12 @@ export const COLLECTIONS = {
   settings: 'settings',
 } as const;
 
+/** Subcollections of `families/{familyId}` (DECISIONS D1, D6). */
+export const FAMILY_SUBCOLLECTIONS = {
+  shoppingLists: 'shoppingLists',
+  busyBlocks: 'busyBlocks',
+} as const;
+
 /** Maps a snapshot to a model object that carries its document id. */
 export function withId<T extends { id: string }>(
   snap: QueryDocumentSnapshot<DocumentData> | DocumentSnapshot<DocumentData>,

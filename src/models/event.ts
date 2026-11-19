@@ -18,7 +18,7 @@ export interface CalendarEvent {
   private: boolean;
   /** Reserved: participants selection is not part of Release 0.1 (creator only). */
   participants: string[];
-  /** Reserved: space selection for events is not part of Release 0.1 ("personal"). */
+  /** Personal or Family (DECISIONS D5). */
   spaceId: SpaceId;
   familyId: string | null;
   /** Reserved for Release 0.3 (projects). */
@@ -30,8 +30,8 @@ export interface CalendarEvent {
   createdAt: string;
 }
 
-/** Fields the user edits in the event form (Release 0.1). */
+/** Fields the user edits in the event form. */
 export type CalendarEventInput = Pick<
   CalendarEvent,
-  'title' | 'startDateTime' | 'endDateTime' | 'location' | 'categoryId' | 'private'
+  'title' | 'startDateTime' | 'endDateTime' | 'location' | 'categoryId' | 'private' | 'spaceId'
 >;

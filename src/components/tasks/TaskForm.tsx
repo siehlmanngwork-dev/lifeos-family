@@ -3,6 +3,7 @@ import {
   PRIORITIES,
   PRIORITY_META,
   SPACE_LABELS,
+  type CalendarEvent,
   type Category,
   type Priority,
   type SpaceId,
@@ -11,10 +12,19 @@ import {
   type UserProfile,
 } from '../../models';
 import { fromDateTimeLocalValue, toDateKey, toDateTimeLocalValue } from '../../utils/date';
+import { detectConflicts } from '../../services/dashboard/conflictEngine';
+import type { SeriesInput } from '../../services/firestore';
+import { ConflictWarning } from '../shared/ConflictWarning';
+import { RecurrenceFields } from './RecurrenceFields';
+import { NO_RECURRENCE, type RecurrenceValue } from './recurrenceValue';
 import { ErrorNote } from '../shared/Feedback';
 
 interface TaskFormProps {
   task?: Task;
+  /** Events checked for deadline conflicts. */
+  events: CalendarEvent[];
+  /** Space preselected for new tasks. */
+  defaultSpaceId?: SpaceId;
   currentUserId: string;
   categories: Category[];
   members: UserProfile[];
@@ -22,13 +32,16 @@ interface TaskFormProps {
   canAssignOthers: boolean;
   submitting: boolean;
   error: string | null;
-  onSubmit: (input: TaskInput) => void;
+  /** `series` is set when a new task repeats. */
+  onSubmit: (input: TaskInput, series: SeriesInput | null) => void;
   onDelete?: () => void;
   canDelete?: boolean;
 }
 
 export function TaskForm({
   task,
+  events,
+  defaultSpaceId = 'personal',
   currentUserId,
   categories,
   members,
@@ -42,7 +55,7 @@ export function TaskForm({
 }: TaskFormProps) {
   const [title, setTitle] = useState(task?.title ?? '');
   const [description, setDescription] = useState(task?.description ?? '');
-  const [spaceId, setSpaceId] = useState<SpaceId>(task?.spaceId ?? 'personal');
+  const [spaceId, setSpaceId] = useState<SpaceId>(task?.spaceId ?? defaultSpaceId);
   const [assignees, setAssignees] = useState<string[]>(task?.assignees ?? [currentUserId]);
   const [priority, setPriority] = useState<Priority>(task?.priority ?? 'normal');
   const [categoryId, setCategoryId] = useState(task?.categoryId ?? '');
@@ -51,7 +64,9 @@ export function TaskForm({
   );
   const [hasDeadline, setHasDeadline] = useState(task ? task.deadline !== null : true);
   const [deadline, setDeadline] = useState(task?.deadline ?? toDateKey(new Date()));
+  const [deadlineTime, setDeadlineTime] = useState(task?.deadlineTime ?? '');
   const [reminder, setReminder] = useState(task?.reminder ? toDateTimeLocalValue(task.reminder) : '');
+  const [recurrence, setRecurrence] = useState<RecurrenceValue>(NO_RECURRENCE);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const selectableMembers = canAssignOthers ? members : members.filter((m) => m.id === currentUserId);
@@ -75,7 +90,22 @@ export function TaskForm({
     if (!categoryId || categoryMissing) return setValidationError('Bitte eine Kategorie wählen.');
     if (!Number.isFinite(minutes) || minutes <= 0) return setValidationError('Bitte einen geschätzten Aufwand angeben.');
     if (hasDeadline && !deadline) return setValidationError('Bitte ein Datum wählen oder „Irgendwann“.');
+    const repeats = !task && recurrence.type !== 'none';
+    if (repeats && !hasDeadline) return setValidationError('Wiederkehrende Aufgaben brauchen ein Startdatum.');
+    if (repeats && recurrence.rotation && recurrence.rotationMembers.length < 2) {
+      return setValidationError('Für die Rotation mindestens zwei Personen wählen.');
+    }
     setValidationError(null);
+    const series: SeriesInput | null =
+      repeats && recurrence.type !== 'none'
+        ? {
+            type: recurrence.type,
+            interval: recurrence.interval,
+            unit: recurrence.unit,
+            count: recurrence.count,
+            rotationMembers: recurrence.rotation ? recurrence.rotationMembers : null,
+          }
+        : null;
     onSubmit({
       title,
       description,
@@ -84,9 +114,10 @@ export function TaskForm({
       categoryId,
       estimatedDuration: minutes,
       deadline: hasDeadline ? deadline : null,
+      deadlineTime: hasDeadline && deadlineTime ? deadlineTime : null,
       reminder: reminder ? fromDateTimeLocalValue(reminder) : null,
       spaceId,
-    });
+    }, series);
   };
 
   return (
@@ -159,8 +190,33 @@ export function TaskForm({
             Irgendwann
           </label>
         </div>
-        {hasDeadline && <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />}
+        {hasDeadline && (
+          <div className="field-row">
+            <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} aria-label="Datum" />
+            <input
+              type="time"
+              value={deadlineTime}
+              onChange={(e) => setDeadlineTime(e.target.value)}
+              aria-label="Uhrzeit (optional)"
+              title="Uhrzeit (optional)"
+            />
+          </div>
+        )}
       </fieldset>
+
+      {task?.seriesId ? (
+        <p className="muted small">🔁 Teil einer Serie ({(task.occurrenceIndex ?? 0) + 1}. Wiederholung)</p>
+      ) : (
+        !task && (
+          <RecurrenceFields
+            value={recurrence}
+            onChange={setRecurrence}
+            members={members}
+            currentUserId={currentUserId}
+            canRotate={canAssignOthers}
+          />
+        )
+      )}
 
       <div className="field-row">
         <label className="field">
@@ -202,6 +258,13 @@ export function TaskForm({
         <input type="datetime-local" value={reminder} onChange={(e) => setReminder(e.target.value)} />
       </label>
 
+      <ConflictWarning
+        conflicts={detectConflicts(
+          events,
+          [{ id: task?.id ?? 'new', title: title || 'Neue Aufgabe', status: 'open', deadline: hasDeadline ? deadline : null, deadlineTime: hasDeadline ? deadlineTime || null : null }],
+          new Date(),
+        )}
+      />
       <ErrorNote message={validationError ?? error} />
 
       <div className="form-actions">

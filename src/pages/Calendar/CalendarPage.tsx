@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { CalendarEvent } from '../../models';
 import { CalendarToolbar, type CalendarView } from '../../components/calendar/CalendarToolbar';
 import { EventEditor } from '../../components/calendar/EventEditor';
 import { MonthView } from '../../components/calendar/MonthView';
 import { TimeGrid } from '../../components/calendar/TimeGrid';
 import { ErrorNote } from '../../components/shared/Feedback';
-import { useCategories, useEvents } from '../../hooks/useData';
+import { useCategories, useEvents, useTasks } from '../../hooks/useData';
 import { useNow } from '../../hooks/useNow';
+import { useCurrentUser } from '../../hooks/useSession';
+import { detectConflicts } from '../../services/dashboard/conflictEngine';
+import { openTasksFor } from '../../services/dashboard/dashboardEngine';
 import { addDays, addMonths, formatLongDate, startOfDay, startOfWeek } from '../../utils/date';
 
 type EditorState = { event?: CalendarEvent; defaultStart?: Date } | null;
@@ -24,6 +27,13 @@ export function CalendarPage() {
   const now = useNow();
   const { data: events, error } = useEvents();
   const { byId: categoriesById } = useCategories();
+  const { userId } = useCurrentUser();
+  const { data: tasks } = useTasks();
+  // Events in which an own open task's deadline falls are marked (warning only).
+  const markedEventIds = useMemo(
+    () => new Set(detectConflicts(events, openTasksFor(tasks, userId), now).flatMap((c) => c.eventIds)),
+    [events, tasks, userId, now],
+  );
   const [view, setView] = useState<CalendarView>('week');
   const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
   const [editor, setEditor] = useState<EditorState>(null);
@@ -63,6 +73,7 @@ export function CalendarPage() {
             events={events}
             categoriesById={categoriesById}
             now={now}
+            markedEventIds={markedEventIds}
             onEventClick={(event) => setEditor({ event })}
             onDayClick={openDay}
           />
@@ -72,6 +83,7 @@ export function CalendarPage() {
             events={events}
             categoriesById={categoriesById}
             now={now}
+            markedEventIds={markedEventIds}
             onEventClick={(event) => setEditor({ event })}
             onSlotClick={(start) => setEditor({ defaultStart: start })}
             onDayClick={view === 'week' ? openDay : undefined}

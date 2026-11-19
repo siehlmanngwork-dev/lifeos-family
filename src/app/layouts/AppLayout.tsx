@@ -1,26 +1,36 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { EventEditor } from '../../components/calendar/EventEditor';
 import { Modal } from '../../components/shared/Modal';
+import { StatusEditor } from '../../components/status/StatusEditor';
 import { TaskEditor } from '../../components/tasks/TaskEditor';
+import { useBusyBlockSync } from '../../hooks/useBusyBlockSync';
+import { useMemberStatus } from '../../hooks/useMemberStatus';
 import { useCurrentUser } from '../../hooks/useSession';
+import { formatStatus } from '../../services/status/statusEngine';
 import { buildNavigation } from '../../services/permissions/navigation';
 
-type NewDialog = 'menu' | 'task' | 'event' | null;
+type NewDialog = 'menu' | 'task' | 'event' | 'status' | null;
 
 /**
  * App shell: side navigation on desktop, bottom navigation on mobile.
  * Navigation entries are generated from the user's permissions.
  */
 export function AppLayout() {
-  const { profile, permissions } = useCurrentUser();
+  const { userId, profile, permissions } = useCurrentUser();
   const [dialog, setDialog] = useState<NewDialog>(null);
   const items = buildNavigation(permissions);
+  useBusyBlockSync();
+  const self = useMemo(() => [profile], [profile]);
+  const ownStatus = useMemberStatus(self).get(userId)?.status ?? { source: 'none' as const };
 
   return (
     <div className="app-shell">
       <header className="topbar">
         <span className="brand">LifeOS Family</span>
+        <button type="button" className="status-chip" onClick={() => setDialog('status')} title="Status ändern">
+          {formatStatus(ownStatus)}
+        </button>
         <NavLink to="/settings" className="topbar-user" title="Einstellungen">
           <span className="avatar">{profile.displayName.charAt(0).toUpperCase()}</span>
           <span className="topbar-name">{profile.displayName}</span>
@@ -70,6 +80,14 @@ export function AppLayout() {
       )}
       {dialog === 'task' && <TaskEditor onClose={() => setDialog(null)} />}
       {dialog === 'event' && <EventEditor onClose={() => setDialog(null)} />}
+      {dialog === 'status' && (
+        <StatusEditor
+          userId={userId}
+          current={ownStatus}
+          manual={profile.manualStatus}
+          onClose={() => setDialog(null)}
+        />
+      )}
     </div>
   );
 }

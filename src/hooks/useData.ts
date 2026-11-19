@@ -1,10 +1,15 @@
 import { useMemo } from 'react';
-import type { CalendarEvent, Category, Family, Task, UserProfile } from '../models';
+import type { UserSettings } from '../models';
+import type { BusyBlock, CalendarEvent, Category, Family, ShoppingItem, ShoppingList, Task, UserProfile } from '../models';
 import {
+  subscribeBusyBlocks,
   subscribeCategories,
   subscribeEvents,
   subscribeFamily,
   subscribeFamilyMembers,
+  subscribeSettings,
+  subscribeShoppingItems,
+  subscribeShoppingLists,
   subscribeTasks,
 } from '../services/firestore';
 import { useCurrentUser } from './useSession';
@@ -22,12 +27,25 @@ export function useTasks() {
   );
 }
 
+/** Own events plus non-private family events. */
 export function useEvents() {
-  const { userId } = useCurrentUser();
+  const { userId, profile } = useCurrentUser();
+  const familyId = profile.familyId;
   return useSubscription<CalendarEvent[]>(
-    (onData, onError) => subscribeEvents(userId, onData, onError),
+    (onData, onError) => subscribeEvents(userId, familyId, onData, onError),
     EMPTY,
-    [userId],
+    [userId, familyId],
+  );
+}
+
+/** Busy entries of all family members (DECISIONS D6). */
+export function useBusyBlocks() {
+  const { profile } = useCurrentUser();
+  const familyId = profile.familyId;
+  return useSubscription<BusyBlock[]>(
+    familyId ? (onData, onError) => subscribeBusyBlocks(familyId, onData, onError) : null,
+    EMPTY,
+    [familyId],
   );
 }
 
@@ -78,4 +96,34 @@ export function useFamilyMembers() {
   }, [state.data, profile]);
   const byId = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   return { ...state, members, byId };
+}
+
+export function useShoppingLists() {
+  const { profile } = useCurrentUser();
+  const familyId = profile.familyId;
+  return useSubscription<ShoppingList[]>(
+    familyId ? (onData, onError) => subscribeShoppingLists(familyId, onData, onError) : null,
+    EMPTY,
+    [familyId],
+  );
+}
+
+/** All shopping items of the family. */
+export function useShoppingItems() {
+  const { profile } = useCurrentUser();
+  const familyId = profile.familyId;
+  return useSubscription<ShoppingItem[]>(
+    familyId ? (onData, onError) => subscribeShoppingItems(familyId, onData, onError) : null,
+    EMPTY,
+    [familyId],
+  );
+}
+
+export function useSettings() {
+  const { userId } = useCurrentUser();
+  return useSubscription<UserSettings | null>(
+    (onData, onError) => subscribeSettings(userId, onData, onError),
+    null,
+    [userId],
+  );
 }

@@ -3,13 +3,15 @@ import type { CalendarEvent, Task } from '../../models';
 import { EventEditor } from '../../components/calendar/EventEditor';
 import { AgendaSection } from '../../components/dashboard/AgendaSection';
 import { ConflictArea } from '../../components/dashboard/ConflictArea';
+import { OverdueRecurringDialog } from '../../components/dashboard/OverdueRecurringDialog';
+import { SeriesEndNotice } from '../../components/dashboard/SeriesEndNotice';
 import { ImportantTaskCard, NextEventCard } from '../../components/dashboard/FocusCards';
 import { Greeting } from '../../components/dashboard/Greeting';
 import { CapacityBar } from '../../components/shared/CapacityBar';
 import { Card } from '../../components/shared/Card';
 import { ErrorNote } from '../../components/shared/Feedback';
 import { TaskEditor } from '../../components/tasks/TaskEditor';
-import { useCategories, useEvents, useTasks } from '../../hooks/useData';
+import { useCategories, useEvents, useSettings, useTasks } from '../../hooks/useData';
 import { useNow } from '../../hooks/useNow';
 import { useCurrentUser } from '../../hooks/useSession';
 import { detectConflicts } from '../../services/dashboard/conflictEngine';
@@ -22,7 +24,9 @@ import {
   openTasksFor,
   restOfWeekDays,
 } from '../../services/dashboard/dashboardEngine';
-import { addDays } from '../../utils/date';
+import { overdueRecurring, seriesEndingSoon } from '../../services/recurrence/recurrenceEngine';
+import { DEFAULT_OVERDUE_DIALOG_TIME } from '../../models';
+import { addDays, toDateKey } from '../../utils/date';
 
 export function DashboardPage() {
   const now = useNow();
@@ -32,6 +36,9 @@ export function DashboardPage() {
   const { byId: categoriesById } = useCategories();
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const { data: settings } = useSettings();
+  // Overdue dialogs closed without a decision reappear on the next visit.
+  const [postponed, setPostponed] = useState<string[]>([]);
 
   const view = useMemo(() => {
     const myOpenTasks = openTasksFor(tasks, userId);
@@ -45,8 +52,11 @@ export function DashboardPage() {
       tomorrow: agendaFor(addDays(now, 1), events, myOpenTasks),
       week: restOfWeekDays(now).map((d) => agendaFor(d, events, myOpenTasks)),
       capacity: dayCapacity(now, events, myOpenTasks, profile.availableHoursPerDay),
+      endingSeries: seriesEndingSoon(tasks, userId, toDateKey(now), settings?.dismissedSeriesIds ?? []),
+      overdue: overdueRecurring(tasks, userId, now, settings?.overdueDialogTime ?? DEFAULT_OVERDUE_DIALOG_TIME),
     };
-  }, [tasks, events, userId, now, profile.availableHoursPerDay]);
+  }, [tasks, events, userId, now, profile.availableHoursPerDay, settings]);
+  const overdueTask = view.overdue.find((t) => !postponed.includes(t.id)) ?? null;
 
   return (
     <div className="page dashboard">
@@ -64,6 +74,7 @@ export function DashboardPage() {
       </div>
 
       <ConflictArea conflicts={view.conflicts} />
+      <SeriesEndNotice userId={userId} series={view.endingSeries} />
 
       <div className="dashboard-grid">
         <AgendaSection
@@ -98,6 +109,13 @@ export function DashboardPage() {
 
       {editingTask && <TaskEditor task={editingTask} onClose={() => setEditingTask(null)} />}
       {editingEvent && <EventEditor event={editingEvent} onClose={() => setEditingEvent(null)} />}
+      {overdueTask && !editingTask && !editingEvent && (
+        <OverdueRecurringDialog
+          key={overdueTask.id}
+          task={overdueTask}
+          onClose={() => setPostponed((p) => [...p, overdueTask.id])}
+        />
+      )}
     </div>
   );
 }

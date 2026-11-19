@@ -13,11 +13,12 @@ interface TaskItemProps {
 
 export function TaskItem({ task, category, assigneeNames, onToggle, onOpen, compact = false }: TaskItemProps) {
   const done = task.status === 'done';
+  const discarded = task.status === 'discarded';
   const overdue = !done && task.deadline !== null && task.deadline < toDateKey(new Date());
 
   return (
     <li
-      className={`task-item ${done ? 'done' : ''}`}
+      className={`task-item ${done || discarded ? 'done' : ''}`}
       style={{ borderLeftColor: PRIORITY_META[task.priority].color }}
     >
       {onToggle && (
@@ -30,13 +31,17 @@ export function TaskItem({ task, category, assigneeNames, onToggle, onOpen, comp
         />
       )}
       <button type="button" className="task-main" onClick={() => onOpen?.(task)} disabled={!onOpen}>
-        <span className="task-title">{task.title}</span>
+        <span className="task-title">
+          {task.seriesId ? '🔁 ' : ''}
+          {task.title}
+        </span>
         <span className="task-meta">
           <span className={overdue ? 'overdue' : ''}>
             {overdue ? 'Überfällig · ' : ''}
-            {formatDeadline(task.deadline)}
+            {formatDeadline(task.deadline, task.deadlineTime)}
           </span>
           <span>{formatDuration(task.estimatedDuration)}</span>
+          {discarded && <span className="badge discarded">Verworfen</span>}
           {!compact && <span>{SPACE_LABELS[task.spaceId]}</span>}
           {!compact && assigneeNames && assigneeNames.length > 0 && <span>👤 {assigneeNames.join(', ')}</span>}
         </span>

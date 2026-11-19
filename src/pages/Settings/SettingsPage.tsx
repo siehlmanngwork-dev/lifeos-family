@@ -1,4 +1,5 @@
 import { CategoryManager } from '../../components/settings/CategoryManager';
+import { OverdueDialogSettings } from '../../components/settings/OverdueDialogSettings';
 import { ProfileForm } from '../../components/settings/ProfileForm';
 import { ErrorNote } from '../../components/shared/Feedback';
 import { useCategories } from '../../hooks/useData';
@@ -21,6 +22,7 @@ export function SettingsPage() {
       <div className="two-columns">
         <ProfileForm profile={profile} />
         <CategoryManager userId={userId} categories={own} />
+        <OverdueDialogSettings userId={userId} />
       </div>
     </div>
   );

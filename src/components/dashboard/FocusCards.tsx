@@ -25,7 +25,7 @@ export function ImportantTaskCard({ task, category, overdue, onOpen }: Important
           <span className="focus-meta">
             <span className={overdue ? 'overdue' : ''}>
               {overdue ? 'Überfällig · ' : 'Deadline: '}
-              {formatDeadline(task.deadline)}
+              {formatDeadline(task.deadline, task.deadlineTime)}
             </span>
             <span>Aufwand: {formatDuration(task.estimatedDuration)}</span>
           </span>

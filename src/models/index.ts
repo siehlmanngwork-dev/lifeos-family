@@ -8,3 +8,5 @@ export * from './category';
 export * from './task';
 export * from './event';
 export * from './conflict';
+export * from './shopping';
+export * from './status';

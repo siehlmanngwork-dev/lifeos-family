@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import { SessionContext, type SessionState } from '../app/providers/SessionProvider';
+import { SessionContext, type SessionState } from '../app/providers/sessionContext';
 
 export function useSession(): SessionState {
   return useContext(SessionContext);

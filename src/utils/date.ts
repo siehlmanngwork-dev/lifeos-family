@@ -86,9 +86,10 @@ export function formatShortDate(date: Date): string {
   return date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
 }
 
-export function formatDeadline(deadline: string | null): string {
+export function formatDeadline(deadline: string | null, time?: string | null): string {
   if (!deadline) return 'Irgendwann';
-  return formatShortDate(fromDateKey(deadline));
+  const date = formatShortDate(fromDateKey(deadline));
+  return time ? `${date} ${time}` : date;
 }
 
 /** e.g. "2 h 30 min" */

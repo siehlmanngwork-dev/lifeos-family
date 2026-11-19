@@ -1,11 +1,19 @@
 import { useState, type FormEvent } from 'react';
-import type { CalendarEvent, CalendarEventInput, Category } from '../../models';
+import { SPACE_LABELS, type CalendarEvent, type CalendarEventInput, type Category, type SpaceId, type Task } from '../../models';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '../../utils/date';
+import { detectConflicts } from '../../services/dashboard/conflictEngine';
+import { ConflictWarning } from '../shared/ConflictWarning';
 import { ErrorNote } from '../shared/Feedback';
 
 interface EventFormProps {
   event?: CalendarEvent;
   defaultStart: Date;
+  defaultSpaceId?: SpaceId;
+  hasFamily: boolean;
+  /** Event of another family member: shown, but not editable. */
+  readOnly?: boolean;
+  /** Open tasks checked for deadline conflicts. */
+  tasks: Task[];
   categories: Category[];
   submitting: boolean;
   error: string | null;
@@ -15,8 +23,21 @@ interface EventFormProps {
 
 const HOUR = 60 * 60 * 1000;
 
-export function EventForm({ event, defaultStart, categories, submitting, error, onSubmit, onDelete }: EventFormProps) {
+export function EventForm({
+  event,
+  defaultStart,
+  defaultSpaceId = 'personal',
+  hasFamily,
+  readOnly = false,
+  tasks,
+  categories,
+  submitting,
+  error,
+  onSubmit,
+  onDelete,
+}: EventFormProps) {
   const [title, setTitle] = useState(event?.title ?? '');
+  const [spaceId, setSpaceId] = useState<SpaceId>(event?.spaceId ?? (hasFamily ? defaultSpaceId : 'personal'));
   const [start, setStart] = useState(
     toDateTimeLocalValue(event?.startDateTime ?? defaultStart.toISOString()),
   );
@@ -50,6 +71,7 @@ export function EventForm({ event, defaultStart, categories, submitting, error, 
       location,
       categoryId: categoryId || null,
       private: isPrivate,
+      spaceId,
     });
   };
 
@@ -90,11 +112,33 @@ export function EventForm({ event, defaultStart, categories, submitting, error, 
         </label>
       </div>
 
+      {(hasFamily || spaceId === 'family') && (
+        <label className="field">
+          <span>Space</span>
+          <select value={spaceId} onChange={(e) => setSpaceId(e.target.value as SpaceId)}>
+            <option value="personal">{SPACE_LABELS.personal}</option>
+            <option value="family">{SPACE_LABELS.family}</option>
+          </select>
+        </label>
+      )}
+
       <label className="checkbox">
         <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
         Privat
       </label>
+      {isPrivate && hasFamily && (
+        <small className="muted">Andere Familienmitglieder sehen nur „Beschäftigt“.</small>
+      )}
 
+      {start && end && new Date(end) > new Date(start) && (
+        <ConflictWarning
+          conflicts={detectConflicts(
+            [{ id: event?.id ?? 'new', title: title || 'Neuer Termin', startDateTime: fromDateTimeLocalValue(start), endDateTime: fromDateTimeLocalValue(end) }],
+            tasks,
+            new Date(),
+          )}
+        />
+      )}
       <ErrorNote message={validationError ?? error} />
 
       <div className="form-actions">
@@ -103,9 +147,13 @@ export function EventForm({ event, defaultStart, categories, submitting, error, 
             Löschen
           </button>
         )}
-        <button type="submit" className="button primary" disabled={submitting}>
-          {event ? 'Speichern' : 'Termin erstellen'}
-        </button>
+        {readOnly ? (
+          <small className="muted">Nur die Person, die den Termin angelegt hat, kann ihn ändern.</small>
+        ) : (
+          <button type="submit" className="button primary" disabled={submitting}>
+            {event ? 'Speichern' : 'Termin erstellen'}
+          </button>
+        )}
       </div>
     </form>
   );

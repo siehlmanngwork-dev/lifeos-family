@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import type { CalendarEvent, CalendarEventInput } from '../../models';
-import { useCategories } from '../../hooks/useData';
+import type { CalendarEvent, CalendarEventInput, SpaceId } from '../../models';
+import { useCategories, useTasks } from '../../hooks/useData';
+import { openTasksFor } from '../../services/dashboard/dashboardEngine';
 import { useCurrentUser } from '../../hooks/useSession';
 import { createEvent, deleteEvent, updateEvent } from '../../services/firestore';
 import { Modal } from '../shared/Modal';
@@ -10,6 +11,8 @@ interface EventEditorProps {
   event?: CalendarEvent;
   /** Start time for new events (defaults to the next full hour). */
   defaultStart?: Date;
+  /** Space preselected for new events. */
+  defaultSpaceId?: SpaceId;
   onClose: () => void;
 }
 
@@ -21,9 +24,11 @@ function nextFullHour(): Date {
 }
 
 /** Modal to create, edit or delete an event. */
-export function EventEditor({ event, defaultStart, onClose }: EventEditorProps) {
-  const { userId } = useCurrentUser();
+export function EventEditor({ event, defaultStart, defaultSpaceId, onClose }: EventEditorProps) {
+  const { userId, profile } = useCurrentUser();
+  const familyId = profile.familyId;
   const { own, byId } = useCategories();
+  const { data: tasks } = useTasks();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const foreign = event?.categoryId ? byId.get(event.categoryId) : undefined;
@@ -42,11 +47,13 @@ export function EventEditor({ event, defaultStart, onClose }: EventEditorProps) 
   };
 
   const handleSubmit = (input: CalendarEventInput) =>
-    run(() => (event ? updateEvent(event.id, input) : createEvent(userId, input)));
+    run(() => (event ? updateEvent(event, familyId, input) : createEvent(userId, familyId, input)));
 
+  // Only the creator may change a family event (firestore.rules).
+  const canEdit = !event || event.createdBy === userId;
   const canDelete = event?.createdBy === userId;
   const handleDelete = () => {
-    if (event && window.confirm(`Termin „${event.title}“ wirklich löschen?`)) run(() => deleteEvent(event.id));
+    if (event && window.confirm(`Termin „${event.title}“ wirklich löschen?`)) run(() => deleteEvent(event, familyId));
   };
 
   return (
@@ -54,6 +61,10 @@ export function EventEditor({ event, defaultStart, onClose }: EventEditorProps) 
       <EventForm
         event={event}
         defaultStart={defaultStart ?? nextFullHour()}
+        defaultSpaceId={defaultSpaceId}
+        hasFamily={familyId !== null}
+        tasks={openTasksFor(tasks, userId)}
+        readOnly={!canEdit}
         categories={categories}
         submitting={submitting}
         error={error}

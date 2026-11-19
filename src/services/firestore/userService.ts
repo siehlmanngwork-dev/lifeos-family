@@ -3,6 +3,7 @@ import { getDb } from '../../firebase/config';
 import {
   DEFAULT_PERMISSIONS,
   DEFAULT_WEEKLY_CAPACITY,
+  type ManualStatus,
   type UserProfile,
   type UserProfileUpdate,
   type UserSettings,
@@ -63,6 +64,11 @@ export function subscribeUserProfile(
     (snap) => onData(snap.exists() ? withId<UserProfile>(snap) : null),
     onError,
   );
+}
+
+/** Sets or clears (null) the manual status override (RELEASE_0.2_SPEC §3). */
+export function setManualStatus(userId: string, status: ManualStatus | null): Promise<void> {
+  return updateDoc(doc(getDb(), COLLECTIONS.users, userId), { manualStatus: status });
 }
 
 export function updateUserProfile(userId: string, update: UserProfileUpdate): Promise<void> {

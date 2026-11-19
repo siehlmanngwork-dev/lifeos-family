@@ -1,8 +1,8 @@
 /**
- * Conflict types (MVP_SPEC §10). Detection is implemented in Release 0.2;
- * Release 0.1 only defines the shape and a placeholder engine.
+ * Conflict types (MVP_SPEC §10, RELEASE_0.2_SPEC §5).
+ * Release 0.2 detects "deadline-in-event"; the other types are reserved.
  */
-export type ConflictType = 'event-overlap' | 'insufficient-time';
+export type ConflictType = 'deadline-in-event' | 'event-overlap' | 'insufficient-time';
 
 export interface Conflict {
   id: string;

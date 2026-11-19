@@ -34,6 +34,7 @@ export function useSubscription<T>(
       (error) => setState((s) => ({ ...s, loading: false, error: error.message })),
     );
     // `subscribe` is recreated on every render; `deps` controls resubscription.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
   return state;
