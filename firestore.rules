@@ -1,0 +1,194 @@
+rules_version = '2';
+
+// LifeOS Family — Firestore security rules (Release 0.1)
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function signedIn() {
+      return request.auth != null;
+    }
+    function uid() {
+      return request.auth.uid;
+    }
+    function isSelf(userId) {
+      return signedIn() && uid() == userId;
+    }
+    function userPath(userId) {
+      return /databases/$(database)/documents/users/$(userId);
+    }
+    function familyPath(familyId) {
+      return /databases/$(database)/documents/families/$(familyId);
+    }
+    function myFamilyId() {
+      return get(userPath(uid())).data.familyId;
+    }
+    function myPermissions() {
+      return get(/databases/$(database)/documents/permissions/$(uid())).data;
+    }
+    function isAdmin() {
+      return signedIn() && myPermissions().admin == true;
+    }
+
+    // ---------- users ----------
+    match /users/{userId} {
+      allow read: if isSelf(userId)
+        || (signedIn() && resource.data.familyId != null && resource.data.familyId == myFamilyId());
+
+      allow create: if isSelf(userId)
+        && request.resource.data.familyId == null
+        && request.resource.data.displayName is string;
+
+      // familyId may only be set once, and only to a family that lists the user as member
+      // (after the same batch — see familyService).
+      allow update: if isSelf(userId)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['displayName', 'availableHoursPerDay', 'familyId', 'photoURL'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['familyId'])
+          || (
+            resource.data.familyId == null
+            && uid() in getAfter(familyPath(request.resource.data.familyId)).data.memberIds
+          )
+        );
+    }
+
+    // ---------- legacy dashboard (dashboard_archiv) ----------
+    // The old dashboard stores todos/events/eventTypes as subcollections of users/{uid}.
+    // Only subcollections are matched, so the profile document above keeps its stricter rules.
+    match /users/{userId}/{subcollection}/{document=**} {
+      allow read, write: if isSelf(userId);
+    }
+
+    // ---------- families ----------
+    // Document id == join code. Knowing the code is the invitation (MVP_SPEC §4).
+    match /families/{familyId} {
+      allow get: if signedIn();
+      allow list: if false;
+
+      allow create: if signedIn()
+        && request.resource.data.createdBy == uid()
+        && request.resource.data.joinCode == familyId
+        && request.resource.data.memberIds == [uid()]
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && get(userPath(uid())).data.familyId == null
+        && getAfter(userPath(uid())).data.familyId == familyId;
+
+      // Joining: the user may only add themself.
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds'])
+        && !(uid() in resource.data.memberIds)
+        && request.resource.data.memberIds == resource.data.memberIds.concat([uid()])
+        && get(userPath(uid())).data.familyId == null
+        && getAfter(userPath(uid())).data.familyId == familyId;
+
+      allow delete: if false;
+    }
+
+    // ---------- permissions ----------
+    // Individual permissions, no roles. Changes only by users holding `admin`.
+    match /permissions/{userId} {
+      allow read: if isSelf(userId) || isAdmin();
+      allow create: if isSelf(userId)
+        && request.resource.data.keys().hasOnly(
+             ['dashboard', 'calendar', 'tasks', 'family', 'projects', 'admin', 'assignTasksToOthers'])
+        && request.resource.data.admin == false
+        && request.resource.data.projects == false
+        && request.resource.data.assignTasksToOthers == false;
+      allow update, delete: if isAdmin();
+    }
+
+    // ---------- settings ----------
+    match /settings/{userId} {
+      allow read, write: if isSelf(userId);
+    }
+
+    // ---------- categories ----------
+    match /categories/{categoryId} {
+      function validCategory(d) {
+        return d.name is string && d.name.size() > 0 && d.color is string
+          && (d.icon == null || d.icon is string);
+      }
+      // Name/color only; readable so shared family tasks can display them.
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.ownerId == uid()
+        && validCategory(request.resource.data);
+      allow update: if signedIn() && resource.data.ownerId == uid()
+        && request.resource.data.ownerId == uid()
+        && validCategory(request.resource.data);
+      allow delete: if signedIn() && resource.data.ownerId == uid();
+    }
+
+    // ---------- tasks ----------
+    match /tasks/{taskId} {
+      function validTask(d) {
+        return d.title is string && d.title.size() > 0
+          && d.assignees is list && d.assignees.size() > 0
+          && d.priority in ['low', 'normal', 'high', 'critical', 'immediate']
+          && d.categoryId is string && d.categoryId.size() > 0
+          && d.estimatedDuration is number && d.estimatedDuration > 0
+          && (d.deadline == null || d.deadline is string)
+          && d.status in ['open', 'done']
+          && (
+            (d.spaceId == 'personal' && d.familyId == null && d.assignees.size() == 1)
+            || (d.spaceId == 'family' && d.familyId != null && d.familyId == myFamilyId())
+          );
+      }
+      // Assigning others requires the individual permission `assignTasksToOthers`.
+      function assigneesAllowed(d) {
+        return d.assignees == [uid()] || myPermissions().assignTasksToOthers == true;
+      }
+      function canAccess(d) {
+        return uid() in d.assignees
+          || d.createdBy == uid()
+          || (d.familyId != null && d.familyId == myFamilyId());
+      }
+
+      allow read: if signedIn() && canAccess(resource.data);
+
+      allow create: if signedIn()
+        && request.resource.data.createdBy == uid()
+        && validTask(request.resource.data)
+        && assigneesAllowed(request.resource.data);
+
+      allow update: if signedIn()
+        && canAccess(resource.data)
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && validTask(request.resource.data)
+        && (request.resource.data.assignees == resource.data.assignees
+            || assigneesAllowed(request.resource.data));
+
+      allow delete: if signedIn() && resource.data.createdBy == uid();
+    }
+
+    // ---------- events ----------
+    match /events/{eventId} {
+      function validEvent(d) {
+        return d.title is string && d.title.size() > 0
+          && d.startDateTime is string && d.endDateTime is string
+          && d.endDateTime > d.startDateTime
+          && d.private is bool
+          && uid() in d.participants;
+      }
+      allow read: if signedIn()
+        && (uid() in resource.data.participants || resource.data.createdBy == uid());
+      allow create: if signedIn()
+        && request.resource.data.createdBy == uid()
+        && validEvent(request.resource.data);
+      allow update: if signedIn()
+        && resource.data.createdBy == uid()
+        && request.resource.data.createdBy == uid()
+        && validEvent(request.resource.data);
+      allow delete: if signedIn() && resource.data.createdBy == uid();
+    }
+
+    // spaces, projects, shoppingItems: later releases — no access yet.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
