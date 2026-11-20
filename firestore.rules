@@ -249,7 +249,8 @@ service cloud.firestore {
       }
       allow read: if isFamilyMember(familyId);
       allow create, update: if isFamilyMember(familyId) && validBlock(request.resource.data);
-      allow delete: if signedIn() && resource.data.ownerId == uid();
+      // resource is null when the busy block does not exist; deleting a missing doc is harmless.
+      allow delete: if signedIn() && (resource == null || resource.data.ownerId == uid());
     }
 
     // ---------- shoppingItems ----------

@@ -123,7 +123,9 @@ export async function createEvent(userId: string, userFamilyId: string | null, i
   };
   const batch = writeBatch(db);
   batch.set(ref, event);
-  if (userFamilyId) writeBusyBlock(batch, userFamilyId, ref.id, expectedBusyBlock({ ...event, id: ref.id }));
+  // A new event never has a busy block to remove, so only write one when it is expected.
+  const block = expectedBusyBlock({ ...event, id: ref.id });
+  if (userFamilyId && block) writeBusyBlock(batch, userFamilyId, ref.id, block);
   await batch.commit();
 }
 
@@ -132,7 +134,10 @@ export async function updateEvent(event: CalendarEvent, userFamilyId: string | n
   const data = normalizeInput(input, userFamilyId);
   const batch = writeBatch(db);
   batch.update(doc(db, COLLECTIONS.events, event.id), { ...data });
-  if (userFamilyId) writeBusyBlock(batch, userFamilyId, event.id, expectedBusyBlock({ ...event, ...data }));
+  // Only touch the busy block when one was or will be expected; avoids deleting a missing doc.
+  const previous = expectedBusyBlock(event);
+  const next = expectedBusyBlock({ ...event, ...data });
+  if (userFamilyId && (previous || next)) writeBusyBlock(batch, userFamilyId, event.id, next);
   await batch.commit();
 }
 
@@ -140,7 +145,8 @@ export async function deleteEvent(event: CalendarEvent, userFamilyId: string | n
   const db = getDb();
   const batch = writeBatch(db);
   batch.delete(doc(db, COLLECTIONS.events, event.id));
-  if (userFamilyId) writeBusyBlock(batch, userFamilyId, event.id, null);
+  // Only delete a busy block that should exist (non-private family events have none).
+  if (userFamilyId && expectedBusyBlock(event)) writeBusyBlock(batch, userFamilyId, event.id, null);
   await batch.commit();
 }
 
